@@ -724,6 +724,13 @@ export default function App() {
   const isDragging = useRef(false);
   const lastMousePos = useRef<Point>({ x: 0, y: 0 });
 
+  // Pinch zoom state
+  const isPinching = useRef(false);
+  const pinchStartDistance = useRef(0);
+  const pinchStartZoom = useRef(1);
+  const pinchStartMidpoint = useRef<Point>({ x: 0, y: 0 });
+  const pinchStartOffset = useRef<Point>({ x: 0, y: 0 });
+
   const clampOffset = useCallback((x: number, y: number, z: number, imgOverride?: HTMLImageElement | null) => {
     const img = imgOverride || mapImage || mapImageRef.current;
     if (!img) return { x, y };
@@ -1187,6 +1194,7 @@ export default function App() {
 
   const handleMouseUp = useCallback(() => {
     isDragging.current = false;
+    isPinching.current = false;
   }, []);
 
   useEffect(() => {
@@ -1194,30 +1202,80 @@ export default function App() {
     if (!canvas) return;
 
     const handleTouch = (e: TouchEvent) => {
-      if (e.touches.length !== 1) return;
-      e.preventDefault();
-      const touch = e.touches[0];
       const rect = canvas.getBoundingClientRect();
-      const x = touch.clientX - rect.left;
-      const y = touch.clientY - rect.top;
       
-      if (e.type === 'touchstart') {
-        startInteraction(x, y);
-      } else if (e.type === 'touchmove') {
-        handleInteraction(x, y);
+      if (e.touches.length === 1) {
+        const touch = e.touches[0];
+        const x = touch.clientX - rect.left;
+        const y = touch.clientY - rect.top;
+
+        // If we were pinching and now have 1 finger, reset pinch and start dragging
+        if (isPinching.current) {
+          isPinching.current = false;
+          startInteraction(x, y);
+        }
+
+        if (e.type === 'touchstart') {
+          startInteraction(x, y);
+        } else if (e.type === 'touchmove') {
+          if (isDragging.current) e.preventDefault();
+          handleInteraction(x, y);
+        }
+      } else if (e.touches.length === 2) {
+        e.preventDefault();
+        const t1 = e.touches[0];
+        const t2 = e.touches[1];
+        
+        const x1 = t1.clientX - rect.left;
+        const y1 = t1.clientY - rect.top;
+        const x2 = t2.clientX - rect.left;
+        const y2 = t2.clientY - rect.top;
+        
+        const dist = Math.hypot(x1 - x2, y1 - y2);
+        const midX = (x1 + x2) / 2;
+        const midY = (y1 + y2) / 2;
+
+        if (!isPinching.current) {
+          isPinching.current = true;
+          isDragging.current = false;
+          pinchStartDistance.current = dist;
+          pinchStartZoom.current = zoom;
+          pinchStartMidpoint.current = { x: midX, y: midY };
+          pinchStartOffset.current = offset;
+        } else if (e.type === 'touchmove') {
+          const img = mapImageRef.current;
+          if (!img) return;
+          
+          const minZoom = Math.max(VIEWPORT_SIZE / img.width, VIEWPORT_SIZE / img.height);
+          const ratio = dist / pinchStartDistance.current;
+          const nextZoom = Math.min(Math.max(pinchStartZoom.current * ratio, minZoom), 10);
+          
+          // Calculate map point under midpoint at start of pinch
+          const mapPointX = (pinchStartMidpoint.current.x - VIEWPORT_SIZE / 2) / pinchStartZoom.current - pinchStartOffset.current.x + VIEWPORT_SIZE / 2;
+          const mapPointY = (pinchStartMidpoint.current.y - VIEWPORT_SIZE / 2) / pinchStartZoom.current - pinchStartOffset.current.y + VIEWPORT_SIZE / 2;
+          
+          // New offset to keep that map point under the current midpoint
+          const newOffsetX = (midX - VIEWPORT_SIZE / 2) / nextZoom - mapPointX + VIEWPORT_SIZE / 2;
+          const newOffsetY = (midY - VIEWPORT_SIZE / 2) / nextZoom - mapPointY + VIEWPORT_SIZE / 2;
+          
+          setZoom(nextZoom);
+          setOffset(clampOffset(newOffsetX, newOffsetY, nextZoom));
+        }
       }
     };
 
     canvas.addEventListener('touchstart', handleTouch, { passive: false });
     canvas.addEventListener('touchmove', handleTouch, { passive: false });
     canvas.addEventListener('touchend', handleMouseUp);
+    canvas.addEventListener('touchcancel', handleMouseUp);
 
     return () => {
       canvas.removeEventListener('touchstart', handleTouch);
       canvas.removeEventListener('touchmove', handleTouch);
       canvas.removeEventListener('touchend', handleMouseUp);
+      canvas.removeEventListener('touchcancel', handleMouseUp);
     };
-  }, [startInteraction, handleInteraction, handleMouseUp]);
+  }, [startInteraction, handleInteraction, handleMouseUp, zoom, offset, clampOffset]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
