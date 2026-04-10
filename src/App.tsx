@@ -1150,43 +1150,62 @@ export default function App() {
   }, [offset, zoom, isLoaded, isPlaying, mapImage]);
 
   // Interaction Handlers
-  const handleMouseDown = (e: React.MouseEvent) => {
+  const startInteraction = useCallback((x: number, y: number) => {
     if (!isLoaded) return;
     isDragging.current = true;
-    lastMousePos.current = { x: e.clientX, y: e.clientY };
+    lastMousePos.current = { x, y };
+  }, [isLoaded]);
+
+  const handleInteraction = useCallback((x: number, y: number) => {
+    if (!isDragging.current || !isLoaded) return;
+    const dx = (x - lastMousePos.current.x) / zoom;
+    const dy = (y - lastMousePos.current.y) / zoom;
+    
+    setOffset(prev => clampOffset(prev.x + dx, prev.y + dy, zoom));
+    lastMousePos.current = { x, y };
+  }, [isLoaded, zoom, clampOffset]);
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    startInteraction(e.clientX, e.clientY);
   };
 
   const handleMouseMove = (e: React.MouseEvent) => {
-    if (!isDragging.current || !isLoaded) return;
-    const dx = (e.clientX - lastMousePos.current.x) / zoom;
-    const dy = (e.clientY - lastMousePos.current.y) / zoom;
-    
-    setOffset(prev => clampOffset(prev.x + dx, prev.y + dy, zoom));
-    lastMousePos.current = { x: e.clientX, y: e.clientY };
+    handleInteraction(e.clientX, e.clientY);
   };
 
-  const handleMouseUp = () => {
+  const handleMouseUp = useCallback(() => {
     isDragging.current = false;
-  };
+  }, []);
 
-  const handleTouchStart = (e: React.TouchEvent) => {
-    if (!isLoaded || e.touches.length !== 1) return;
-    isDragging.current = true;
-    lastMousePos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-  };
+  useEffect(() => {
+    const canvas = canvasRef.current;
+    if (!canvas) return;
 
-  const handleTouchMove = (e: React.TouchEvent) => {
-    if (!isDragging.current || !isLoaded || e.touches.length !== 1) return;
-    const dx = (e.touches[0].clientX - lastMousePos.current.x) / zoom;
-    const dy = (e.touches[0].clientY - lastMousePos.current.y) / zoom;
-    
-    setOffset(prev => clampOffset(prev.x + dx, prev.y + dy, zoom));
-    lastMousePos.current = { x: e.touches[0].clientX, y: e.touches[0].clientY };
-  };
+    const handleTouch = (e: TouchEvent) => {
+      if (e.touches.length !== 1) return;
+      e.preventDefault();
+      const touch = e.touches[0];
+      const rect = canvas.getBoundingClientRect();
+      const x = touch.clientX - rect.left;
+      const y = touch.clientY - rect.top;
+      
+      if (e.type === 'touchstart') {
+        startInteraction(x, y);
+      } else if (e.type === 'touchmove') {
+        handleInteraction(x, y);
+      }
+    };
 
-  const handleTouchEnd = () => {
-    isDragging.current = false;
-  };
+    canvas.addEventListener('touchstart', handleTouch, { passive: false });
+    canvas.addEventListener('touchmove', handleTouch, { passive: false });
+    canvas.addEventListener('touchend', handleMouseUp);
+
+    return () => {
+      canvas.removeEventListener('touchstart', handleTouch);
+      canvas.removeEventListener('touchmove', handleTouch);
+      canvas.removeEventListener('touchend', handleMouseUp);
+    };
+  }, [startInteraction, handleInteraction, handleMouseUp]);
 
   useEffect(() => {
     const canvas = canvasRef.current;
@@ -1255,9 +1274,6 @@ export default function App() {
             onMouseMove={handleMouseMove}
             onMouseUp={handleMouseUp}
             onMouseLeave={handleMouseUp}
-            onTouchStart={handleTouchStart}
-            onTouchMove={handleTouchMove}
-            onTouchEnd={handleTouchEnd}
           />
 
           {/* Loading State */}
