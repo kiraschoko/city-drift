@@ -9,7 +9,7 @@ const Hands = (mpHands as any).Hands || (mpHands as any).default?.Hands || mpHan
 const Camera = (mpCamera as any).Camera || (mpCamera as any).default?.Camera || mpCamera;
 
 // --- Constants ---
-const MAP_SOURCE = "Map-Berlin-v3.png";
+const MAP_SOURCE = "/Map-Berlin-v3.png";
 const ANALYSIS_WINDOW_SIZE = 120; // px
 const VIEWPORT_SIZE = 440; // px
 
