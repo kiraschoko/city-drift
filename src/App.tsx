@@ -740,8 +740,16 @@ export default function App() {
     };
   }, [mapImage]);
 
+  const [isMobile, setIsMobile] = useState(typeof window !== 'undefined' ? window.innerWidth <= 768 : false);
+  
+  const currentAnalysisSize = isMobile ? 400 : ANALYSIS_WINDOW_SIZE;
+  const halfAnalysisSize = currentAnalysisSize / 2;
+
   // Handle Resize
   useEffect(() => {
+    const checkMobile = () => setIsMobile(window.innerWidth <= 768);
+    window.addEventListener('resize', checkMobile);
+    
     const handleResize = () => {
       if (canvasRef.current) {
         canvasRef.current.width = VIEWPORT_SIZE;
@@ -750,7 +758,10 @@ export default function App() {
     };
     handleResize();
     window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', checkMobile);
+      window.removeEventListener('resize', handleResize);
+    };
   }, []);
 
   // Initialize Map
@@ -763,16 +774,18 @@ export default function App() {
       setMapImage(img);
       
       const minZoom = Math.max(VIEWPORT_SIZE / img.width, VIEWPORT_SIZE / img.height);
-      setZoom(minZoom);
+      // Focus more on mobile by increasing initial zoom
+      const initialZoom = isMobile ? minZoom * 1.5 : minZoom;
+      setZoom(initialZoom);
       
       const initialX = (VIEWPORT_SIZE - img.width) / 2;
       const initialY = (VIEWPORT_SIZE - img.height) / 2;
       
       // Use local clamp logic to avoid dependency loop
-      const maxOffsetX = VIEWPORT_SIZE / 2 - VIEWPORT_SIZE / (2 * minZoom);
-      const minOffsetX = VIEWPORT_SIZE / 2 + VIEWPORT_SIZE / (2 * minZoom) - img.width;
-      const maxOffsetY = VIEWPORT_SIZE / 2 - VIEWPORT_SIZE / (2 * minZoom);
-      const minOffsetY = VIEWPORT_SIZE / 2 + VIEWPORT_SIZE / (2 * minZoom) - img.height;
+      const maxOffsetX = VIEWPORT_SIZE / 2 - VIEWPORT_SIZE / (2 * initialZoom);
+      const minOffsetX = VIEWPORT_SIZE / 2 + VIEWPORT_SIZE / (2 * initialZoom) - img.width;
+      const maxOffsetY = VIEWPORT_SIZE / 2 - VIEWPORT_SIZE / (2 * initialZoom);
+      const minOffsetY = VIEWPORT_SIZE / 2 + VIEWPORT_SIZE / (2 * initialZoom) - img.height;
 
       setOffset({
         x: Math.min(Math.max(initialX, minOffsetX), maxOffsetX),
@@ -785,7 +798,7 @@ export default function App() {
     img.onerror = () => {
       setError(`Failed to load ${MAP_SOURCE}. Please ensure the file exists in the project root.`);
     };
-  }, []); // Run once on mount
+  }, [isMobile]); // Re-run if mobile status changes during init
 
   // Analysis Loop
   useEffect(() => {
@@ -797,25 +810,24 @@ export default function App() {
 
       // Create a temporary canvas for sampling from the SAME image
       const tempCanvas = document.createElement('canvas');
-      tempCanvas.width = ANALYSIS_WINDOW_SIZE;
-      tempCanvas.height = ANALYSIS_WINDOW_SIZE;
+      tempCanvas.width = currentAnalysisSize;
+      tempCanvas.height = currentAnalysisSize;
       const tCtx = tempCanvas.getContext("2d", { willReadFrequently: true });
       if (!tCtx) return;
 
       // Calculate source coordinates for the analysis window
       const halfViewport = VIEWPORT_SIZE / 2;
-      const halfWindow = ANALYSIS_WINDOW_SIZE / 2;
       
-      const sx = ( (halfViewport - halfWindow) - halfViewport ) / zoom - offset.x + halfViewport;
-      const sy = ( (halfViewport - halfWindow) - halfViewport ) / zoom - offset.y + halfViewport;
+      const sx = ( (halfViewport - halfAnalysisSize) - halfViewport ) / zoom - offset.x + halfViewport;
+      const sy = ( (halfViewport - halfAnalysisSize) - halfViewport ) / zoom - offset.y + halfViewport;
       
-      const sw = ANALYSIS_WINDOW_SIZE / zoom;
-      const sh = ANALYSIS_WINDOW_SIZE / zoom;
+      const sw = currentAnalysisSize / zoom;
+      const sh = currentAnalysisSize / zoom;
 
       try {
         // Draw the relevant part of the image to the temp canvas
-        tCtx.drawImage(img, sx, sy, sw, sh, 0, 0, ANALYSIS_WINDOW_SIZE, ANALYSIS_WINDOW_SIZE);
-        const imageData = tCtx.getImageData(0, 0, ANALYSIS_WINDOW_SIZE, ANALYSIS_WINDOW_SIZE);
+        tCtx.drawImage(img, sx, sy, sw, sh, 0, 0, currentAnalysisSize, currentAnalysisSize);
+        const imageData = tCtx.getImageData(0, 0, currentAnalysisSize, currentAnalysisSize);
         const pixels = imageData.data;
         
         const GRID_X = 20;
@@ -930,7 +942,7 @@ export default function App() {
     }, 100);
 
     return () => clearInterval(interval);
-  }, [isLoaded, zoom, offset, isPlaying]);
+  }, [isLoaded, zoom, offset, isPlaying, currentAnalysisSize]);
 
   // Render Loop
   useEffect(() => {
@@ -962,12 +974,12 @@ export default function App() {
         ctx.restore();
 
         // 2. Draw the "Sampling Zone" (Inside) - Full Reality
-        const x1 = (VIEWPORT_SIZE - ANALYSIS_WINDOW_SIZE) / 2;
-        const y1 = (VIEWPORT_SIZE - ANALYSIS_WINDOW_SIZE) / 2;
+        const x1 = (VIEWPORT_SIZE - currentAnalysisSize) / 2;
+        const y1 = (VIEWPORT_SIZE - currentAnalysisSize) / 2;
         
         ctx.save();
         ctx.beginPath();
-        ctx.rect(x1, y1, ANALYSIS_WINDOW_SIZE, ANALYSIS_WINDOW_SIZE);
+        ctx.rect(x1, y1, currentAnalysisSize, currentAnalysisSize);
         ctx.clip();
         
         ctx.translate(VIEWPORT_SIZE / 2, VIEWPORT_SIZE / 2);
@@ -997,8 +1009,8 @@ export default function App() {
       }
       
       // Subtle Overlay with Cutout for Sampling Area (Vignette & Dimming)
-      const x1 = (VIEWPORT_SIZE - ANALYSIS_WINDOW_SIZE) / 2;
-      const y1 = (VIEWPORT_SIZE - ANALYSIS_WINDOW_SIZE) / 2;
+      const x1 = (VIEWPORT_SIZE - currentAnalysisSize) / 2;
+      const y1 = (VIEWPORT_SIZE - currentAnalysisSize) / 2;
       const time = Date.now();
       
       ctx.save();
@@ -1007,9 +1019,9 @@ export default function App() {
       ctx.rect(0, 0, VIEWPORT_SIZE, VIEWPORT_SIZE);
       // Inner rectangle (cutout)
       ctx.moveTo(x1, y1);
-      ctx.lineTo(x1, y1 + ANALYSIS_WINDOW_SIZE);
-      ctx.lineTo(x1 + ANALYSIS_WINDOW_SIZE, y1 + ANALYSIS_WINDOW_SIZE);
-      ctx.lineTo(x1 + ANALYSIS_WINDOW_SIZE, y1);
+      ctx.lineTo(x1, y1 + currentAnalysisSize);
+      ctx.lineTo(x1 + currentAnalysisSize, y1 + currentAnalysisSize);
+      ctx.lineTo(x1 + currentAnalysisSize, y1);
       ctx.closePath();
       ctx.clip("evenodd");
 
@@ -1024,17 +1036,17 @@ export default function App() {
       // 1. Inside Area Processing Effect
       ctx.save();
       ctx.beginPath();
-      ctx.rect(x1, y1, ANALYSIS_WINDOW_SIZE, ANALYSIS_WINDOW_SIZE);
+      ctx.rect(x1, y1, currentAnalysisSize, currentAnalysisSize);
       ctx.clip();
 
       // Internal Scan Line (Reading signal) - Kept very subtle as part of sensor feel
-      const scanPos = (time * 0.04) % (ANALYSIS_WINDOW_SIZE * 2);
-      if (scanPos < ANALYSIS_WINDOW_SIZE) {
+      const scanPos = (time * 0.04) % (currentAnalysisSize * 2);
+      if (scanPos < currentAnalysisSize) {
         ctx.strokeStyle = "rgba(95, 143, 139, 0.1)";
         ctx.lineWidth = 1;
         ctx.beginPath();
         ctx.moveTo(x1, y1 + scanPos);
-        ctx.lineTo(x1 + ANALYSIS_WINDOW_SIZE, y1 + scanPos);
+        ctx.lineTo(x1 + currentAnalysisSize, y1 + scanPos);
         ctx.stroke();
       }
 
@@ -1058,10 +1070,10 @@ export default function App() {
         ctx.stroke();
       };
 
-      drawJitteredLine(x1, y1, x1 + ANALYSIS_WINDOW_SIZE, y1);
-      drawJitteredLine(x1, y1 + ANALYSIS_WINDOW_SIZE, x1 + ANALYSIS_WINDOW_SIZE, y1 + ANALYSIS_WINDOW_SIZE);
-      drawJitteredLine(x1, y1, x1, y1 + ANALYSIS_WINDOW_SIZE);
-      drawJitteredLine(x1 + ANALYSIS_WINDOW_SIZE, y1, x1 + ANALYSIS_WINDOW_SIZE, y1 + ANALYSIS_WINDOW_SIZE);
+      drawJitteredLine(x1, y1, x1 + currentAnalysisSize, y1);
+      drawJitteredLine(x1, y1 + currentAnalysisSize, x1 + currentAnalysisSize, y1 + currentAnalysisSize);
+      drawJitteredLine(x1, y1, x1, y1 + currentAnalysisSize);
+      drawJitteredLine(x1 + currentAnalysisSize, y1, x1 + currentAnalysisSize, y1 + currentAnalysisSize);
 
       // 3. Imperfect Corner Brackets
       ctx.setLineDash([]);
@@ -1077,23 +1089,23 @@ export default function App() {
 
       // Top Right
       ctx.beginPath();
-      ctx.moveTo(x1 + ANALYSIS_WINDOW_SIZE + bGap + j(), y1 + bSize + j());
-      ctx.lineTo(x1 + ANALYSIS_WINDOW_SIZE + bGap + j(), y1 - bGap + j());
-      ctx.lineTo(x1 + ANALYSIS_WINDOW_SIZE - bSize + j(), y1 - bGap + j());
+      ctx.moveTo(x1 + currentAnalysisSize + bGap + j(), y1 + bSize + j());
+      ctx.lineTo(x1 + currentAnalysisSize + bGap + j(), y1 - bGap + j());
+      ctx.lineTo(x1 + currentAnalysisSize - bSize + j(), y1 - bGap + j());
       ctx.stroke();
 
       // Bottom Left
       ctx.beginPath();
-      ctx.moveTo(x1 - bGap + j(), y1 + ANALYSIS_WINDOW_SIZE - bSize + j());
-      ctx.lineTo(x1 - bGap + j(), y1 + ANALYSIS_WINDOW_SIZE + bGap + j());
-      ctx.lineTo(x1 + bSize + j(), y1 + ANALYSIS_WINDOW_SIZE + bGap + j());
+      ctx.moveTo(x1 - bGap + j(), y1 + currentAnalysisSize - bSize + j());
+      ctx.lineTo(x1 - bGap + j(), y1 + currentAnalysisSize + bGap + j());
+      ctx.lineTo(x1 + bSize + j(), y1 + currentAnalysisSize + bGap + j());
       ctx.stroke();
 
       // Bottom Right
       ctx.beginPath();
-      ctx.moveTo(x1 + ANALYSIS_WINDOW_SIZE + bGap + j(), y1 + ANALYSIS_WINDOW_SIZE - bSize + j());
-      ctx.lineTo(x1 + ANALYSIS_WINDOW_SIZE + bGap + j(), y1 + ANALYSIS_WINDOW_SIZE + bGap + j());
-      ctx.lineTo(x1 + ANALYSIS_WINDOW_SIZE - bSize + j(), y1 + ANALYSIS_WINDOW_SIZE + bGap + j());
+      ctx.moveTo(x1 + currentAnalysisSize + bGap + j(), y1 + currentAnalysisSize - bSize + j());
+      ctx.lineTo(x1 + currentAnalysisSize + bGap + j(), y1 + currentAnalysisSize + bGap + j());
+      ctx.lineTo(x1 + currentAnalysisSize - bSize + j(), y1 + currentAnalysisSize + bGap + j());
       ctx.stroke();
 
       ctx.restore();
@@ -1301,7 +1313,7 @@ export default function App() {
                 animate={{ opacity: 1, y: 0 }}
                 className="text-[11px] font-mono tracking-[0.4em] text-[#E3E7EC] uppercase whitespace-nowrap"
               >
-                CITY_DRIFT_V3.4 <span className="text-[#8F98A3] tracking-[0.2em] ml-2">BY <a href="https://kirachao.com/" target="_blank" rel="noopener noreferrer" className="hover:text-[#E3E7EC] transition-colors">KIRA CHAO</a></span>
+                CITY_DRIFT_V3.5 <span className="text-[#8F98A3] tracking-[0.2em] ml-2">BY <a href="https://kirachao.com/" target="_blank" rel="noopener noreferrer" className="hover:text-[#E3E7EC] transition-colors">KIRA CHAO</a></span>
               </motion.h1>
             </div>
             <div className="flex items-center gap-3">
