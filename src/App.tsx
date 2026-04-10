@@ -73,8 +73,8 @@ const Waveform = ({ data, color }: { data: number[], color: string }) => {
   }, [data, color]);
 
   return (
-    <div className="w-16 h-4 opacity-40 group-hover:opacity-60 transition-opacity">
-      <canvas ref={canvasRef} width={64} height={16} className="w-full h-full" />
+    <div className="flex-1 md:w-16 md:flex-none h-4 opacity-40 group-hover:opacity-60 transition-opacity">
+      <canvas ref={canvasRef} width={80} height={16} className="w-full h-full" />
     </div>
   );
 };
@@ -88,12 +88,12 @@ const MetricRow = ({ label, value, color, history }: { label: string, value: num
           <span className="text-[9px] font-mono tracking-[0.2em] text-[#C7D0D9] transition-colors uppercase">{label}</span>
         </div>
         
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 w-full md:w-auto">
           <Waveform data={history} color={color} />
           
-          <div className="flex items-center gap-3">
+          <div className="flex-[2] flex items-center gap-3 md:flex-none">
             {/* Calibrated Measurement Bar */}
-            <div className="w-32 h-[1px] bg-[#1A2320] relative overflow-visible">
+            <div className="flex-1 md:w-32 md:flex-none h-[1px] bg-[#1A2320] relative overflow-visible">
               {/* Active Fill */}
               <motion.div 
                 className="absolute inset-y-0 left-0"
@@ -1371,7 +1371,7 @@ export default function App() {
                 animate={{ opacity: 1, y: 0 }}
                 className="text-[11px] font-mono tracking-[0.4em] text-[#E3E7EC] uppercase whitespace-nowrap"
               >
-                CITY_DRIFT_V3.5 <span className="text-[#8F98A3] tracking-[0.2em] ml-2">BY <a href="https://kirachao.com/" target="_blank" rel="noopener noreferrer" className="hover:text-[#E3E7EC] transition-colors">KIRA CHAO</a></span>
+                CITY_DRIFT_V3.5.3 <span className="text-[#8F98A3] tracking-[0.2em] ml-2">BY <a href="https://kirachao.com/" target="_blank" rel="noopener noreferrer" className="hover:text-[#E3E7EC] transition-colors">KIRA CHAO</a></span>
               </motion.h1>
             </div>
             <div className="flex items-center gap-3">
@@ -1381,7 +1381,7 @@ export default function App() {
                 transition={{ delay: 0.2 }}
                 className="text-[9px] font-mono text-[#5A6A66] uppercase tracking-[0.2em]"
               >
-                SYSTEM_OBSERVATION_MODE
+                {isMobile ? "GESTURE_MODE_OPTIMIZED_FOR_SAFARI_CHROME" : "SYSTEM_OBSERVATION_MODE"}
               </motion.span>
               <div className="w-1 h-1 rounded-full bg-emerald-500/50 animate-pulse" />
             </div>

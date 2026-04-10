@@ -1,5 +1,5 @@
 {
-  "name": "City Drift v3.5.2",
+  "name": "City Drift v3.5.3",
   "description": "An interactive browser-based map sonification instrument that translates cartographic data into real-time electronic soundscapes.",
   "requestFramePermissions": [
     "camera"
